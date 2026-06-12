@@ -70,6 +70,10 @@ Lastly, we do all of the necessary modifications we need to the app you're tryin
 
 That's the entire gist of how this works! Of course its very short and brief, however feel free to look how it works since its open source :D
 
+### Advanced Configuration
+
+Set `PLUME_ANISETTE_V3_URL` to use a custom remote anisette v3 server instead of the built-in default.
+
 ### Pairing File
 
 Impactor also allows the user to generate a pairing file for applications to talk directly to the device remotely. This pairing file is device specific and will become invalid if you ever re-trust/update/reset.
