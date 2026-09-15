@@ -133,7 +133,7 @@ dependencies = [
 [[package]]
 name = "android-loader"
 version = "0.2.0"
-source = "git+https://github.com/Dadoum/android-loader?branch=bigger_pages#dfa86501afca7caa23d5ce15322ac7260d857485"
+source = "git+https://github.com/xweiba/android-loader?rev=de8b13d2ff42419c463a7d54035ff20d5898b7d3#de8b13d2ff42419c463a7d54035ff20d5898b7d3"
 dependencies = [
  "anyhow",
  "lazy_static",
@@ -7502,7 +7502,7 @@ dependencies = [
 [[package]]
 name = "sysv64"
 version = "0.1.0"
-source = "git+https://github.com/Dadoum/android-loader?branch=bigger_pages#dfa86501afca7caa23d5ce15322ac7260d857485"
+source = "git+https://github.com/xweiba/android-loader?rev=de8b13d2ff42419c463a7d54035ff20d5898b7d3#de8b13d2ff42419c463a7d54035ff20d5898b7d3"
 
 [[package]]
 name = "tap"

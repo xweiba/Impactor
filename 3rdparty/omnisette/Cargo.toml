@@ -30,7 +30,7 @@ thiserror.workspace = true
 hex.workspace = true
 reqwest.workspace = true
 uuid.workspace = true
-android-loader = { git = "https://github.com/Dadoum/android-loader", branch = "bigger_pages" }
+android-loader = { git = "https://github.com/xweiba/android-loader", rev = "de8b13d2ff42419c463a7d54035ff20d5898b7d3" }
 libc = "0.2"
 log.workspace = true
 async-trait = { version = "0.1", optional = true }
