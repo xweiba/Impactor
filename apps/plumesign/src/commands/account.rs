@@ -128,7 +128,7 @@ pub async fn get_authenticated_account() -> Result<DeveloperSession> {
 
     let anisette_config = AnisetteConfiguration::default().set_configuration_path(get_data_path());
 
-    log::info!("Restoring session for {}...", gsa_account.email());
+    log::info!("Restoring saved developer session...");
 
     let session = DeveloperSession::new(
         gsa_account.adsid().clone(),

@@ -22,5 +22,11 @@ authentication-header generation both passed. No account/session data was used
 and no generated header values were logged. The temporary probe is not shipped.
 This validates local Anisette, not an entire IPA installation or other platforms.
 
+The real saved-session check subsequently reached Apple Developer API and returned
+error 1100 (expired session), without SIGBUS. The CLI defaults to info logging so
+debug payloads do not bury the final error in bounded process diagnostics; session
+restoration no longer prints the account email. Renewing an expired Apple session
+requires the user's normal login and possibly two-factor authentication.
+
 Exit condition: move back to an upstream loader release once equivalent 16 KiB
 page regressions pass; retain the Darwin ABI tests when updating omnisette.

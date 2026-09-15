@@ -10,7 +10,7 @@ use commands::{Cli, Commands};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("debug")).init();
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
     let _ = rustls::crypto::ring::default_provider().install_default();
     let cli = Cli::parse();
 
