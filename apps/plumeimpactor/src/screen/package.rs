@@ -153,26 +153,27 @@ impl PackageScreen {
                 Task::none()
             }
             Message::AddTweak => {
-                let path = rfd::FileDialog::new()
+                let paths = rfd::FileDialog::new()
                     .add_filter("Tweak files", &["deb", "dylib"])
-                    .set_title("Select Tweak File")
-                    .pick_file();
+                    .set_title("Select Tweak File(s)")
+                    .pick_files();
 
-                if let Some(path) = path {
+                if let Some(paths) = paths {
                     match &mut self.options.tweaks {
-                        Some(vec) => vec.push(path),
-                        None => self.options.tweaks = Some(vec![path]),
+                        Some(vec) => vec.extend(paths),
+                        None => self.options.tweaks = Some(paths),
                     }
                 }
 
                 Task::none()
             }
             Message::AddBundle => {
-                let path = rfd::FileDialog::new()
-                    .set_title("Select Bundle Folder")
-                    .pick_folder();
+                let paths = rfd::FileDialog::new()
+                    .set_title("Select Bundle Folder(s)")
+                    .pick_folders()
+                    .unwrap_or_default();
 
-                if let Some(path) = path {
+                for path in paths {
                     if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
                         if ["framework", "bundle", "appex"].contains(&ext) {
                             match &mut self.options.tweaks {
@@ -512,14 +513,15 @@ impl PackageScreen {
                 let tweak_row = row![
                     text(tweak.file_name().and_then(|n| n.to_str()).unwrap_or("???"))
                         .size(12)
-                        .width(Fill),
+                        .width(Fill)
+                        .wrapping(text::Wrapping::WordOrGlyph),
                     button(appearance::icon(appearance::MINUS))
                         .on_press(Message::RemoveTweak(i))
                         .style(appearance::s_button)
                         .padding(6)
                 ]
                 .spacing(8)
-                .align_y(Alignment::Center);
+                .align_y(Alignment::Start);
 
                 tweak_list = tweak_list.push(tweak_row);
             }

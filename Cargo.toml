@@ -10,10 +10,11 @@ members = [
     "crates/plume_store",
     "crates/plume_utils",
 ]
+default-members = ["apps/plumeimpactor"]
 
 [workspace.package]
 edition = "2024"
-version = "2.5.1"
+version = "2.6.3"
 authors = ["C <claration@riseup.net>"]
 license = "MIT"
 repository = "https://github.com/claration/Impactor"
@@ -68,6 +69,7 @@ reqwest = { version = "0.13", default-features = false, features = [
     "json",
     "rustls",
     "gzip",
+    "system-proxy",
 ] }
 chrono = { version = "0.4", default-features = false, features = ["std", "serde"] }
 serde = { version = "1", features = ["derive"] }

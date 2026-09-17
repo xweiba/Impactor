@@ -455,7 +455,7 @@ pub(crate) async fn run_installation(
             send("Exporting...".to_string(), 90);
 
             let archive_path = package
-                .archive_signed_package()
+                .get_archive_based_on_path(&package_file.bundle_dir())
                 .map_err(|e| e.to_string())?;
 
             let file = rfd::AsyncFileDialog::new()
