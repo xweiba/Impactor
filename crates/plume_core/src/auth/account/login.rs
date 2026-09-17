@@ -43,6 +43,19 @@ macro_rules! plist_get_string {
     }};
 }
 
+fn srp_password_material(password: &str, protocol: Option<&str>) -> Result<Vec<u8>, Error> {
+    let digest = Sha256::digest(password.as_bytes());
+
+    match protocol {
+        Some("s2k") | None => Ok(digest.to_vec()),
+        Some("s2k_fo") => Ok(hex::encode(digest).into_bytes()),
+        Some(protocol) => Err(Error::AuthSrpWithMessage(
+            0,
+            format!("Unsupported SRP password protocol: {protocol}"),
+        )),
+    }
+}
+
 impl Account {
     pub async fn login(
         appleid_closure: impl Fn() -> Result<(String, String), String>,
@@ -197,16 +210,31 @@ impl Account {
         let res = parse_response(res).await?;
         check_error(&res)?;
 
+        let protocol = match res.get("sp") {
+            Some(Value::String(protocol)) => Some(protocol.as_str()),
+            None => None,
+            Some(_) => {
+                return Err(Error::AuthSrpWithMessage(
+                    0,
+                    "Invalid SRP password protocol value".to_string(),
+                ));
+            }
+        };
+        // Older responses omitted `sp` and historically used s2k. Preserve that
+        // compatibility, but reject unknown named protocols instead of deriving
+        // credentials with the wrong algorithm.
+        let password_material = srp_password_material(password, protocol)?;
+        let protocol_name = protocol.unwrap_or("s2k");
+        eprintln!("PAOPAO_LOGIN_STAGE=srp_init_ok:{protocol_name}");
+
         let salt = res.get("s").unwrap().as_data().unwrap();
         let b_pub = res.get("B").unwrap().as_data().unwrap();
         let iters = res.get("i").unwrap().as_signed_integer().unwrap();
         let c = res.get("c").unwrap().as_string().unwrap();
 
-        let hashed_password = Sha256::digest(password.as_bytes());
-
         let mut password_buf = [0u8; 32];
         pbkdf2::pbkdf2::<hmac::Hmac<Sha256>>(
-            &hashed_password,
+            &password_material,
             salt,
             iters as u32,
             &mut password_buf,
@@ -243,7 +271,9 @@ impl Account {
             .await;
 
         let res = parse_response(res).await?;
+        eprintln!("PAOPAO_LOGIN_STAGE=srp_complete_response");
         check_error(&res)?;
+        eprintln!("PAOPAO_LOGIN_STAGE=srp_complete_ok");
 
         let m2 = res.get("M2").unwrap().as_data().unwrap();
         verifier.verify_server(m2).unwrap();
@@ -264,12 +294,22 @@ impl Account {
         let status = res.get("Status").unwrap().as_dictionary().unwrap();
         if let Some(Value::String(auth_type)) = status.get("au") {
             return match auth_type.as_str() {
-                "trustedDeviceSecondaryAuth" => Ok(LoginState::NeedsDevice2FA),
-                "secondaryAuth" => Ok(LoginState::NeedsSMS2FA),
-                other => Ok(LoginState::NeedsExtraStep(other.to_string())),
+                "trustedDeviceSecondaryAuth" => {
+                    eprintln!("PAOPAO_LOGIN_STAGE=trusted_device_2fa");
+                    Ok(LoginState::NeedsDevice2FA)
+                }
+                "secondaryAuth" => {
+                    eprintln!("PAOPAO_LOGIN_STAGE=sms_2fa");
+                    Ok(LoginState::NeedsSMS2FA)
+                }
+                other => {
+                    eprintln!("PAOPAO_LOGIN_STAGE=extra_step");
+                    Ok(LoginState::NeedsExtraStep(other.to_string()))
+                }
             };
         }
 
+        eprintln!("PAOPAO_LOGIN_STAGE=logged_in");
         Ok(LoginState::LoggedIn)
     }
 
@@ -291,5 +331,41 @@ impl Account {
             *locked = locked.refresh().await.unwrap();
         }
         locked.clone()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::srp_password_material;
+
+    const SHA256_PASSWORD: &[u8] = &[
+        0x5e, 0x88, 0x48, 0x98, 0xda, 0x28, 0x04, 0x71, 0x51, 0xd0, 0xe5, 0x6f, 0x8d, 0xc6,
+        0x29, 0x27, 0x73, 0x60, 0x3d, 0x0d, 0x6a, 0xab, 0xbd, 0xd6, 0x2a, 0x11, 0xef, 0x72,
+        0x1d, 0x15, 0x42, 0xd8,
+    ];
+
+    #[test]
+    fn s2k_uses_raw_sha256_password() {
+        assert_eq!(
+            srp_password_material("password", Some("s2k")).unwrap(),
+            SHA256_PASSWORD
+        );
+    }
+
+    #[test]
+    fn s2k_fo_uses_lowercase_ascii_hex_of_sha256_password() {
+        assert_eq!(
+            srp_password_material("password", Some("s2k_fo")).unwrap(),
+            b"5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8"
+        );
+    }
+
+    #[test]
+    fn missing_protocol_uses_legacy_s2k_but_unknown_protocol_is_rejected() {
+        assert_eq!(
+            srp_password_material("password", None).unwrap(),
+            SHA256_PASSWORD
+        );
+        assert!(srp_password_material("password", Some("future_protocol")).is_err());
     }
 }

@@ -5,7 +5,9 @@ use anyhow::{Ok, Result};
 use clap::{Args, Subcommand};
 use dialoguer::Select;
 
-use plume_core::{AnisetteConfiguration, auth::Account, developer::DeveloperSession};
+use plume_core::{
+    AnisetteConfiguration, Error as PlumeError, auth::Account, developer::DeveloperSession,
+};
 use plume_store::AccountStore;
 
 use crate::get_data_path;
@@ -148,6 +150,8 @@ async fn login(args: LoginArgs) -> Result<()> {
         use plume_core::auth::{TwoFactorAction, TwoFactorMethod};
 
         let can_use_sms = !req.trusted_phone_numbers.is_empty();
+        eprintln!("PAOPAO_LOGIN_STAGE=two_factor_required");
+        eprintln!("PAOPAO_REQUIRES_2FA");
         // PaoPao Agent uses this prefix to detect every interactive 2FA prompt.
         match req.method {
             TwoFactorMethod::Sms => {
@@ -215,7 +219,15 @@ async fn login(args: LoginArgs) -> Result<()> {
     };
 
     println!("Logging in...");
-    let account = Account::login(login_closure, tfa_closure, anisette_config).await?;
+    eprintln!("PAOPAO_LOGIN_STAGE=anisette_start");
+    let account = match Account::login(login_closure, tfa_closure, anisette_config).await {
+        std::result::Result::Ok(account) => account,
+        std::result::Result::Err(error) => {
+            eprintln!("PAOPAO_LOGIN_ERROR={}", safe_login_error_kind(&error));
+            return Err(error.into());
+        }
+    };
+    eprintln!("PAOPAO_LOGIN_STAGE=authenticated");
 
     let settings_path = get_settings_path();
     let mut settings = AccountStore::load(&Some(settings_path.clone())).await?;
@@ -226,6 +238,62 @@ async fn login(args: LoginArgs) -> Result<()> {
     log::info!("Successfully logged in and account saved.");
 
     Ok(())
+}
+
+fn safe_login_error_kind(error: &PlumeError) -> &'static str {
+    match error {
+        PlumeError::AuthSrpWithMessage(-22406, _) => "auth_srp_password",
+        PlumeError::AuthSrpWithMessage(_, _) => "auth_srp",
+        PlumeError::ExtraStep(_) => "extra_step",
+        PlumeError::Bad2faCode => "bad_2fa",
+        PlumeError::Reqwest(_) => "network",
+        PlumeError::Anisette(_) => "anisette",
+        PlumeError::Parse | PlumeError::Plist(_) => "apple_response_parse",
+        _ => "other",
+    }
+}
+
+#[cfg(test)]
+mod login_tests {
+    use super::safe_login_error_kind;
+    use plume_core::Error as PlumeError;
+
+    #[test]
+    fn login_error_markers_are_stable_and_do_not_include_error_details() {
+        let plist_error = plist::from_bytes::<plist::Value>(b"not a plist").unwrap_err();
+        let cases = [
+            (
+                PlumeError::AuthSrpWithMessage(-22406, "secret password".to_string()),
+                "auth_srp_password",
+            ),
+            (
+                PlumeError::AuthSrpWithMessage(500, "sensitive response".to_string()),
+                "auth_srp",
+            ),
+            (
+                PlumeError::ExtraStep("sensitive step payload".to_string()),
+                "extra_step",
+            ),
+            (PlumeError::Bad2faCode, "bad_2fa"),
+            (PlumeError::Parse, "apple_response_parse"),
+            (PlumeError::Plist(plist_error), "apple_response_parse"),
+            (PlumeError::BundleExecutableMissing, "other"),
+        ];
+
+        for (error, expected) in cases {
+            let marker = safe_login_error_kind(&error);
+            assert_eq!(marker, expected);
+            assert!(!marker.contains("secret"));
+            assert!(!marker.contains("sensitive"));
+            assert!(
+                marker
+                    .bytes()
+                    .all(|byte| {
+                        byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_'
+                    })
+            );
+        }
+    }
 }
 
 async fn logout() -> Result<()> {

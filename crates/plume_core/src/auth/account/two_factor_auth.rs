@@ -10,23 +10,29 @@ impl Account {
     pub async fn send_2fa_to_devices(&self) -> Result<LoginState, Error> {
         let headers = self.build_2fa_headers(false).await;
 
-        let res = self
+        let delivery_result = self
             .client
             .get("https://gsa.apple.com/auth/verify/trusteddevice")
             .headers(headers)
             .send()
-            .await?;
+            .await;
 
-        let status_code = res.status();
-
-        if !status_code.is_success() {
-            return Err(Error::AuthSrpWithMessage(
-                status_code.as_u16() as i64,
-                "Failed to send 2FA to devices".to_string(),
-            ));
+        // This endpoint only requests notification delivery. Delivery is best-effort:
+        // the user-supplied code is still always checked by Apple's validation endpoint
+        // in `verify_2fa`, so continuing here cannot bypass 2FA verification. SMS send
+        // failures remain hard errors because that flow explicitly requests a new code.
+        match delivery_result {
+            Ok(response) if !response.status().is_success() => log::warn!(
+                "Trusted-device 2FA notification returned HTTP {}; continuing to code verification",
+                response.status().as_u16()
+            ),
+            Err(_) => log::warn!(
+                "Trusted-device 2FA notification failed; continuing to code verification"
+            ),
+            Ok(_) => {}
         }
 
-        return Ok(LoginState::Needs2FAVerification);
+        Ok(LoginState::Needs2FAVerification)
     }
 
     pub async fn send_sms_2fa_to_devices(&self, phone_id: u32) -> Result<LoginState, Error> {

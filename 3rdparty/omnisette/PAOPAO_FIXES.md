@@ -1,6 +1,44 @@
-# macOS ARM64 local Anisette fixes
+# PaoPao Impactor fork fixes
 
-Baseline: claration/Impactor `6eecd15f082f2ec003607dc437a43379be5e1d5f`.
+Upstream baseline: claration/Impactor 2.6.3 at
+`6eecd15f082f2ec003607dc437a43379be5e1d5f`. The authentication additions below
+start from PaoPao fork commit `8ea9c77e7432749bc8da7cf8a10258e82d79df93`.
+
+## Authentication compatibility
+
+- GrandSlam SRP honors the response `sp` value. `s2k` derives PBKDF2 from the
+  raw SHA-256 password digest, while `s2k_fo` derives it from the digest's
+  lowercase ASCII hex. A missing value retains legacy `s2k` compatibility;
+  unknown or malformed values fail explicitly.
+- GrandSlam envelopes are parsed from response bytes, preserving binary plists.
+  PaoPao diagnostics report only plist format, HTTP status, login stage and a
+  fixed error category; response bodies, headers and credentials are excluded.
+- Trusted-device notification delivery is best-effort because Apple's separate
+  validation endpoint still verifies the entered code. SMS delivery errors
+  remain fatal and do not fall through to verification.
+- Plumesign retains the 2.6.3 `TwoFactorRequest` device/SMS selection flow and
+  every interactive prompt still starts with the exact `Enter 2FA code:` prefix.
+
+Authentication compatibility validation completed on 2026-09-17:
+
+- `cargo test --locked -p plume_core -p plumesign` passed (7 tests across 3
+  suites).
+- `cargo test --locked -p plumesign -p omnisette --lib posix_macos::tests`
+  passed (2 tests).
+- `cargo build --release --locked -p plumesign` passed.
+
+These automated regressions exercise the local `s2k`/`s2k_fo` derivation and
+binary/XML plist fixtures. They do not constitute a real Apple password login,
+or end-to-end server validation of Apple's `s2k_fo` or binary plist responses;
+those live authentication paths remain unverified.
+
+Exit conditions: remove the SRP/plist/trusted-device compatibility changes once
+an upstream release provides equivalent behavior and these regressions pass
+against it. Remove the PaoPao diagnostic markers and exact prompt contract only
+after PaoPao Agent uses a stable structured authentication channel instead of
+parsing process output.
+
+## macOS ARM64 local Anisette fixes
 
 - Upstream loader: dadoum/android-loader, bigger_pages baseline
   `dfa86501afca7caa23d5ce15322ac7260d857485`.
@@ -44,6 +82,4 @@ requires the user's normal login and possibly two-factor authentication.
 Exit condition: move back to an upstream loader release once equivalent 16 KiB
 page regressions pass; retain the Darwin ABI tests when updating omnisette. Drop
 the remaining local changes individually when upstream provides equivalent
-behavior and the corresponding regressions pass. The 2FA prompt prefix can be
-dropped once PaoPao Agent no longer parses terminal output and uses a stable,
-structured authentication handshake instead.
+behavior and the corresponding regressions pass.
