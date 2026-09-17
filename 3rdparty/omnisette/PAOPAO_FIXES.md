@@ -24,17 +24,18 @@ the CLI and GUI use `get_archive_based_on_path` with the extracted bundle path,
 and ZIP entry separators are normalized. The earlier fork-only
 `archive_signed_package` implementation has been removed.
 
-Required regression: `cargo test -p plumesign -p omnisette --lib posix_macos::tests`.
-It covers both layout and real file I/O behavior on macOS ARM64. Selecting
-plumesign retains the dependency feature set needed by these tests; standalone
-upstream omnisette tests lack Tokio macros and Chrono clock features. This
-baseline update does not claim a new test run; validation is tracked separately.
+Validation completed on 2026-09-17:
 
-On 2026-09-15 an account-free, disposable-directory probe called the real local
-provider with the bundled arm64 libraries. First provisioning and a second
-authentication-header generation both passed. No account/session data was used
-and no generated header values were logged. The temporary probe is not shipped.
-This validates local Anisette, not an entire IPA installation or other platforms.
+- `cargo test --locked -p plumesign` passed.
+- `cargo build --release --locked -p plumesign` passed.
+- The macOS ARM64 ABI and file-hook regression tests passed (`2 passed`).
+- A local-provider probe used a fresh temporary state directory containing only
+  the two ARM64 shared libraries, with remote fallback disabled. Initial
+  provisioning and a second reuse both succeeded without SIGBUS.
+
+No generated anisette values or account/session data are recorded here. The
+temporary probe is not shipped. This validates local Anisette, not an entire IPA
+installation or other platforms.
 
 The real saved-session check subsequently reached Apple Developer API and returned
 error 1100 (expired session), without SIGBUS. Renewing an expired Apple session
