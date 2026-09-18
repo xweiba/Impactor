@@ -1,11 +1,42 @@
 use super::{Bundle, PlistInfoTrait};
 use crate::{Error, SignerApp, SignerOptions, cgbi};
 use plist::Dictionary;
-use std::path::PathBuf;
+use std::path::{Component, Path, PathBuf};
 use std::{env, fs, io::Read};
 use uuid::Uuid;
 use zip::ZipArchive;
 use zip::write::FileOptions;
+
+fn is_apple_metadata_path(path: &Path) -> bool {
+    path.components().any(|component| match component {
+        Component::Normal(name) => {
+            let name = name.to_string_lossy();
+            name == "__MACOSX" || name == ".DS_Store" || name.starts_with("._")
+        }
+        _ => false,
+    })
+}
+
+fn remove_apple_metadata(path: &Path) -> Result<(), Error> {
+    for entry in fs::read_dir(path)? {
+        let entry = entry?;
+        let entry_path = entry.path();
+
+        if is_apple_metadata_path(&entry_path) {
+            if entry.file_type()?.is_dir() {
+                fs::remove_dir_all(entry_path)?;
+            } else {
+                fs::remove_file(entry_path)?;
+            }
+            continue;
+        }
+
+        if entry.file_type()?.is_dir() {
+            remove_apple_metadata(&entry_path)?;
+        }
+    }
+    Ok(())
+}
 
 #[derive(Debug, Clone)]
 pub struct Package {
@@ -166,6 +197,10 @@ impl Package {
         let file = fs::File::open(&self.package_file)?;
         let mut archive = ZipArchive::new(file)?;
         archive.extract(&self.stage_dir)?;
+        // Remove metadata before signing. Removing it only while producing the
+        // final ZIP would leave stale entries in the code-signing resource
+        // envelope and iOS would reject the app as modified after signing.
+        remove_apple_metadata(&self.stage_dir)?;
 
         let app_dir = fs::read_dir(&self.stage_payload_dir)?
             .filter_map(Result::ok)
@@ -207,6 +242,14 @@ impl Package {
                     .to_string_lossy()
                     .replace('\\', "/");
 
+                // Finder and some macOS archive tools add AppleDouble sidecar files
+                // (for example `Payload/._Runner.app`). iOS may interpret a top-level
+                // sidecar ending in `.app` as another application bundle and reject the
+                // entire IPA because that pseudo-bundle has no Info.plist.
+                if is_apple_metadata_path(Path::new(&name)) {
+                    continue;
+                }
+
                 if entry_path.is_file() {
                     zip.start_file(&name, options.clone())?;
                     let mut f = fs::File::open(&entry_path)?;
@@ -227,6 +270,62 @@ impl Package {
 
     pub fn remove_package_stage(self) {
         fs::remove_dir_all(&self.stage_dir).ok();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{is_apple_metadata_path, remove_apple_metadata};
+    use std::{fs, path::Path};
+    use uuid::Uuid;
+
+    #[test]
+    fn identifies_macos_metadata_that_must_not_be_packaged() {
+        for path in [
+            "Payload/._Runner.app",
+            "Payload/Runner.app/._Info.plist",
+            "Payload/Runner.app/.DS_Store",
+            "__MACOSX/Payload/Runner.app/Info.plist",
+        ] {
+            assert!(
+                is_apple_metadata_path(Path::new(path)),
+                "expected {path} to be treated as metadata"
+            );
+        }
+    }
+
+    #[test]
+    fn keeps_real_application_bundle_files() {
+        for path in [
+            "Payload/Runner.app",
+            "Payload/Runner.app/Info.plist",
+            "Payload/Runner.app/Frameworks/App.framework/App",
+        ] {
+            assert!(
+                !is_apple_metadata_path(Path::new(path)),
+                "expected {path} to remain in the IPA"
+            );
+        }
+    }
+
+    #[test]
+    fn removes_metadata_before_the_bundle_is_signed() {
+        let root = std::env::temp_dir().join(format!("plume_metadata_test_{}", Uuid::new_v4()));
+        let app = root.join("Payload/Runner.app");
+        fs::create_dir_all(app.join("Frameworks")).unwrap();
+        fs::create_dir_all(root.join("__MACOSX/Payload")).unwrap();
+        fs::write(app.join("Info.plist"), b"real plist").unwrap();
+        fs::write(root.join("Payload/._Runner.app"), b"sidecar").unwrap();
+        fs::write(app.join("Frameworks/._App"), b"sidecar").unwrap();
+        fs::write(root.join("__MACOSX/Payload/metadata"), b"metadata").unwrap();
+
+        remove_apple_metadata(&root).unwrap();
+
+        assert!(app.join("Info.plist").exists());
+        assert!(!root.join("Payload/._Runner.app").exists());
+        assert!(!app.join("Frameworks/._App").exists());
+        assert!(!root.join("__MACOSX").exists());
+        fs::remove_dir_all(root).unwrap();
     }
 }
 
