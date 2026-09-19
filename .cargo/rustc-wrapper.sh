@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # Redirect all output to log file except for the final exec'd command
 LOG_FILE="/tmp/patch-log.txt"
