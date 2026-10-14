@@ -272,7 +272,9 @@ impl BundleType {
         match ext {
             "app" => Some(BundleType::App),
             "appex" => Some(BundleType::AppExtension),
-            "framework" => Some(BundleType::Framework),
+            // A UI-test bundle (`PlugIns/*.xctest`) is signed like a framework:
+            // without it the runner inside an app is left unsigned.
+            "framework" | "xctest" => Some(BundleType::Framework),
             "dylib" => Some(BundleType::Dylib),
             _ => Some(BundleType::Unknown),
         }
@@ -286,5 +288,18 @@ impl BundleType {
     /// Returns true if this bundle type should be code signed
     pub fn should_be_signed(&self) -> bool {
         !matches!(self, BundleType::Unknown)
+    }
+}
+
+#[cfg(test)]
+mod bundle_type_tests {
+    use super::BundleType;
+
+    #[test]
+    fn xctest_bundles_are_signed_like_frameworks() {
+        let kind = BundleType::from_extension("xctest").unwrap();
+        assert!(matches!(kind, BundleType::Framework));
+        assert!(kind.should_be_signed());
+        assert!(!kind.should_have_entitlements());
     }
 }
