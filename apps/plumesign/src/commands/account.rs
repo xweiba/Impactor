@@ -229,6 +229,7 @@ async fn login(args: LoginArgs) -> Result<()> {
     };
     eprintln!("PAOPAO_LOGIN_STAGE=authenticated");
 
+    eprintln!("PAOPAO_LOGIN_STAGE=save_account");
     let settings_path = get_settings_path();
     let mut settings = AccountStore::load(&Some(settings_path.clone())).await?;
     settings
@@ -247,6 +248,7 @@ fn safe_login_error_kind(error: &PlumeError) -> &'static str {
         PlumeError::AuthSrpWithMessage(_, _) => "auth_srp",
         PlumeError::ExtraStep(_) => "extra_step",
         PlumeError::Bad2faCode => "bad_2fa",
+        PlumeError::Reqwest(error) if caused_by_eof(error) => "network_tls_eof",
         PlumeError::Reqwest(_) => "network",
         PlumeError::Anisette(_) => "anisette",
         PlumeError::Parse | PlumeError::Plist(_) => "apple_response_parse",
@@ -254,10 +256,36 @@ fn safe_login_error_kind(error: &PlumeError) -> &'static str {
     }
 }
 
+// Walk typed causes instead of classifying arbitrary URL or response text.
+fn caused_by_eof(mut error: &(dyn std::error::Error + 'static)) -> bool {
+    loop {
+        if error
+            .downcast_ref::<std::io::Error>()
+            .is_some_and(|error| error.kind() == std::io::ErrorKind::UnexpectedEof)
+        {
+            return true;
+        }
+        match error.source() {
+            Some(source) => error = source,
+            None => return false,
+        }
+    }
+}
+
 #[cfg(test)]
 mod login_tests {
-    use super::safe_login_error_kind;
+    use super::{caused_by_eof, safe_login_error_kind};
     use plume_core::Error as PlumeError;
+
+    #[test]
+    fn eof_category_uses_error_kind_not_error_text() {
+        assert!(caused_by_eof(&std::io::Error::from(
+            std::io::ErrorKind::UnexpectedEof
+        )));
+        assert!(!caused_by_eof(&std::io::Error::other(
+            "unexpected eof, close_notify, sensitive response"
+        )));
+    }
 
     #[test]
     fn login_error_markers_are_stable_and_do_not_include_error_details() {

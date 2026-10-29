@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::time::SystemTime;
 
-use omnisette::{AnisetteConfiguration, AnisetteHeaders};
+use omnisette::{AnisetteConfiguration, AnisetteHeaders, AnisetteHeadersProviderType};
 use reqwest::header::{HeaderMap, HeaderValue};
 
 use crate::Error;
@@ -35,6 +35,13 @@ impl AnisetteData {
 
     pub async fn new(config: AnisetteConfiguration) -> Result<Self, Error> {
         let mut b = AnisetteHeaders::get_anisette_headers_provider(config.clone())?;
+        eprintln!(
+            "PAOPAO_LOGIN_PROVIDER={}",
+            match b.provider_type {
+                AnisetteHeadersProviderType::Local => "local",
+                AnisetteHeadersProviderType::Remote => "remote",
+            }
+        );
         let base_headers = b.provider.get_authentication_headers().await?;
 
         Ok(AnisetteData {

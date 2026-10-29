@@ -214,6 +214,7 @@ impl Account {
         let mut buffer = Vec::new();
         plist::to_writer_xml(&mut buffer, &init_packet)?;
 
+        eprintln!("PAOPAO_LOGIN_STAGE=srp_init_request");
         let res = self
             .client
             .post(GSA_ENDPOINT)
@@ -277,6 +278,7 @@ impl Account {
 
         gsa_headers.insert("Connection", HeaderValue::from_static("close"));
 
+        eprintln!("PAOPAO_LOGIN_STAGE=srp_complete_request");
         let res = self
             .client
             .post(GSA_ENDPOINT)

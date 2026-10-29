@@ -50,6 +50,7 @@ impl Account {
         plist::to_writer_xml(&mut buffer, &packet)?;
         let buffer = String::from_utf8(buffer).unwrap();
 
+        eprintln!("PAOPAO_LOGIN_STAGE=app_token_request");
         let res = self
             .client
             .post(GSA_ENDPOINT)
@@ -58,6 +59,7 @@ impl Account {
             .send()
             .await;
         let res = parse_response(res).await?;
+        eprintln!("PAOPAO_LOGIN_STAGE=app_token_response");
         let err_check = check_error(&res);
         if err_check.is_err() {
             return Err(err_check.err().unwrap());

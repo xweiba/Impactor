@@ -2,6 +2,11 @@
 
 ## Upstream 2.7.2 integration (2026-10-28)
 
+Follow-up diagnostics report only the selected local/remote provider and fixed
+GrandSlam request stages. TLS EOF is classified from typed I/O causes, without
+printing authentication data or inferring a proxy failure. These markers aid
+user-driven login diagnosis; they do not retry authentication automatically.
+
 Merged claration/impactor `b13d99559febd63e3710dfdd0ef8cdd78d10ae13`.
 This includes the upstream -80045 client-info changes, the updated default
 remote V3 service, 409 verification responses, HTTP error handling, .so signing,
