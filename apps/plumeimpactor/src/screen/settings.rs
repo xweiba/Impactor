@@ -30,6 +30,7 @@ pub enum Message {
     TeamsLoaded(String, Vec<Team>),
     ToggleAutoStart(bool),
     SelectLocale(Option<String>),
+    ResetAnisetteData,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -91,6 +92,11 @@ impl SettingsScreen {
             Message::ToggleAutoStart(_) => Task::none(),
             Message::SelectTeam(_, _) => Task::none(),
             Message::SelectLocale(_) => Task::none(),
+            Message::ResetAnisetteData => {
+                let path = crate::defaults::get_data_path().join("state.plist");
+                let _ = std::fs::remove_file(path);
+                Task::none()
+            }
             _ => Task::none(),
         }
     }
@@ -196,6 +202,15 @@ impl SettingsScreen {
         content = content.push(self.view_auto_start_toggle(auto_start_enabled));
         content = content.push(self.view_language_picker(selected_locale));
         content = content.push(self.view_account_buttons(selected_index));
+        content = content.push(
+            button(appearance::icon_text(
+                appearance::MINUS,
+                t!("settings_reset_adi"),
+                None,
+            ))
+            .on_press(Message::ResetAnisetteData)
+            .style(appearance::s_button),
+        );
 
         content.into()
     }

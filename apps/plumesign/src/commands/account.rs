@@ -242,6 +242,7 @@ async fn login(args: LoginArgs) -> Result<()> {
 
 fn safe_login_error_kind(error: &PlumeError) -> &'static str {
     match error {
+        PlumeError::AuthSrpWithMessage(-80045, _) => "auth_device",
         PlumeError::AuthSrpWithMessage(-22406, _) => "auth_srp_password",
         PlumeError::AuthSrpWithMessage(_, _) => "auth_srp",
         PlumeError::ExtraStep(_) => "extra_step",
@@ -262,6 +263,10 @@ mod login_tests {
     fn login_error_markers_are_stable_and_do_not_include_error_details() {
         let plist_error = plist::from_bytes::<plist::Value>(b"not a plist").unwrap_err();
         let cases = [
+            (
+                PlumeError::AuthSrpWithMessage(-80045, "sensitive device response".to_string()),
+                "auth_device",
+            ),
             (
                 PlumeError::AuthSrpWithMessage(-22406, "secret password".to_string()),
                 "auth_srp_password",
@@ -285,13 +290,9 @@ mod login_tests {
             assert_eq!(marker, expected);
             assert!(!marker.contains("secret"));
             assert!(!marker.contains("sensitive"));
-            assert!(
-                marker
-                    .bytes()
-                    .all(|byte| {
-                        byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_'
-                    })
-            );
+            assert!(marker.bytes().all(|byte| {
+                byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_'
+            }));
         }
     }
 }

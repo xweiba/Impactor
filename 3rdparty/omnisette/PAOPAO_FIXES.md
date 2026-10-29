@@ -1,5 +1,25 @@
 # PaoPao Impactor fork fixes
 
+## Upstream 2.7.2 integration (2026-10-28)
+
+Merged claration/impactor `b13d99559febd63e3710dfdd0ef8cdd78d10ae13`.
+This includes the upstream -80045 client-info changes, the updated default
+remote V3 service, 409 verification responses, HTTP error handling, .so signing,
+and Mach-O fixes. Existing fork SRP negotiation, binary-plist handling, 2FA
+prompt/diagnostic contract, Apple Silicon loader/file hooks and .xctest signing
+remain in place. The V3 environment override remains supported.
+
+Upstream #303 removes fabricated client-info from local providers. Login now
+omits that optional header if absent; header generation still emits independent
+application/CPD fields, and case-insensitive lookup preserves header values.
+Error -80045 has the fixed `auth_device` diagnostic category. HTTP failures are
+reported before body parsing; successful bodies retain byte-based parsing.
+
+Regression checks include missing client-info, provider identity case, HTTP
+429/503 non-plist responses, 409 challenges, and the retained SRP/plist/signing
+tests. These checks do not establish a real Apple login; user password and 2FA
+entry remain in the normal application flow.
+
 Upstream baseline: claration/Impactor 2.6.3 at
 `6eecd15f082f2ec003607dc437a43379be5e1d5f`. The authentication additions below
 start from PaoPao fork commit `8ea9c77e7432749bc8da7cf8a10258e82d79df93`.

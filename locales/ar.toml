@@ -49,6 +49,7 @@ settings_select_teams = "اختر فريقًا..."
 settings_loading_teams = "جارٍ تحميل الفِرَق..."
 settings_language = "اللغة:"
 settings_system_language = "النظام"
+settings_reset_adi = "Reset Anisette Data"
 
 utilities_loading = "جارٍ التحميل..."
 utilities_refresh_installed_apps = "تحديث التطبيقات المثبتة"

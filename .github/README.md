@@ -40,9 +40,9 @@ Some distributions (like Bazzite) may need you to run `sudo update-crypto-polici
 
 ## Download
 
-Visit [releases](https://github.com/khcrysalis/PlumeImpactor/releases) and get the latest version for your computer.
+Visit [releases](https://github.com/claration/impactor/releases) and get the latest version for your computer.
 
-###### *This is also available on flatpak & homebrew.*
+###### *This is also available on flathub & homebrew.*
 
 **Linux:**
 
@@ -110,8 +110,8 @@ To properly contribute and test potentially test localizations, you can head ove
 
 ## Acknowledgements
 
-- [SAMSAM](https://github.com/khcrysalis) – The maker.
-- [Paige](https://github.com/paigely) – Icon & flatpak distribution.
+- [CLARATION](https://github.com/claration) – The maker.
+- [Paige](https://github.com/ssalggnikool) – Icon & flatpak distribution.
 - [SideStore](https://github.com/SideStore/apple-private-apis) – Grandslam auth & Omnisette.
 - [gms.py](https://gist.github.com/JJTech0130/049716196f5f1751b8944d93e73d3452) – Grandslam auth API references.
 - [isideload](https://github.com/nab138/isideload) - Code for properly grabbing Xcode token.

@@ -49,6 +49,7 @@ settings_select_teams = "Выбрать команду..."
 settings_loading_teams = "Загрузка команд..."
 settings_language = "Language:"
 settings_system_language = "System"
+settings_reset_adi = "Reset Anisette Data"
 
 utilities_loading = "Загрузка..."
 utilities_refresh_installed_apps = "Обновить список установленных приложений"

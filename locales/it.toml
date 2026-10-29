@@ -49,6 +49,7 @@ settings_select_teams = "Scelgo il team..."
 settings_loading_teams = "Carico team..."
 settings_language = "Language:"
 settings_system_language = "System"
+settings_reset_adi = "Reset Anisette Data"
 
 utilities_loading = "Carico..."
 utilities_refresh_installed_apps = "Refresh App Installate"

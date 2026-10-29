@@ -1,6 +1,6 @@
 use omnisette::AnisetteConfiguration;
 use plist::{Dictionary, Value};
-use reqwest::header::{HeaderMap, HeaderValue};
+use reqwest::header::HeaderValue;
 use sha2::{Digest, Sha256};
 use srp::groups::G2048;
 
@@ -56,6 +56,32 @@ fn srp_password_material(password: &str, protocol: Option<&str>) -> Result<Vec<u
     }
 }
 
+/// Explicit authentication methods take precedence over the newer generic 409
+/// challenge, which may arrive without the historical `au` field.
+fn login_state_from_status(status: &Dictionary) -> LoginState {
+    if let Some(Value::String(auth_type)) = status.get("au") {
+        return match auth_type.as_str() {
+            "trustedDeviceSecondaryAuth" => {
+                eprintln!("PAOPAO_LOGIN_STAGE=trusted_device_2fa");
+                LoginState::NeedsDevice2FA
+            }
+            "secondaryAuth" => {
+                eprintln!("PAOPAO_LOGIN_STAGE=sms_2fa");
+                LoginState::NeedsSMS2FA
+            }
+            other => {
+                eprintln!("PAOPAO_LOGIN_STAGE=extra_step");
+                LoginState::NeedsExtraStep(other.to_string())
+            }
+        };
+    }
+    if status.get("hsc").and_then(Value::as_signed_integer) == Some(409) {
+        return LoginState::Needs2FAVerification;
+    }
+    eprintln!("PAOPAO_LOGIN_STAGE=logged_in");
+    LoginState::LoggedIn
+}
+
 impl Account {
     pub async fn login(
         appleid_closure: impl Fn() -> Result<(String, String), String>,
@@ -95,6 +121,11 @@ impl Account {
                     }
                 }
                 LoginState::Needs2FAVerification => {
+                    if trusted_phone_numbers.is_empty() {
+                        if let Ok(extras) = _self.get_auth_extras().await {
+                            trusted_phone_numbers = extras.trusted_phone_numbers;
+                        }
+                    }
                     let request = TwoFactorRequest {
                         method: TwoFactorMethod::Device,
                         trusted_phone_numbers: trusted_phone_numbers.clone(),
@@ -125,10 +156,7 @@ impl Account {
                         trusted_phone_numbers: trusted_phone_numbers.clone(),
                     };
                     match tfa_closure(request).map_err(|e| {
-                        Error::AuthSrpWithMessage(
-                            0,
-                            format!("Failed to get SMS 2FA code: {}", e),
-                        )
+                        Error::AuthSrpWithMessage(0, format!("Failed to get SMS 2FA code: {}", e))
                     })? {
                         TwoFactorAction::SubmitCode(code) => {
                             response = _self.verify_sms_2fa(code, body).await?
@@ -165,20 +193,7 @@ impl Account {
 
         let anisette = self.get_anisette().await;
 
-        let mut gsa_headers = HeaderMap::new();
-        gsa_headers.insert(
-            "Content-Type",
-            HeaderValue::from_str("text/x-xml-plist").unwrap(),
-        );
-        gsa_headers.insert("Accept", HeaderValue::from_str("*/*").unwrap());
-        gsa_headers.insert(
-            "User-Agent",
-            HeaderValue::from_str("akd/1.0 CFNetwork/978.0.7 Darwin/18.7.0").unwrap(),
-        );
-        gsa_headers.insert(
-            "X-MMe-Client-Info",
-            HeaderValue::from_str(&anisette.get_header("x-mme-client-info")?).unwrap(),
-        );
+        let mut gsa_headers = anisette.gsa_headers()?;
 
         let header = RequestHeader {
             version: "1.0.1".to_string(),
@@ -292,25 +307,7 @@ impl Account {
         self.spd = Some(spd);
 
         let status = res.get("Status").unwrap().as_dictionary().unwrap();
-        if let Some(Value::String(auth_type)) = status.get("au") {
-            return match auth_type.as_str() {
-                "trustedDeviceSecondaryAuth" => {
-                    eprintln!("PAOPAO_LOGIN_STAGE=trusted_device_2fa");
-                    Ok(LoginState::NeedsDevice2FA)
-                }
-                "secondaryAuth" => {
-                    eprintln!("PAOPAO_LOGIN_STAGE=sms_2fa");
-                    Ok(LoginState::NeedsSMS2FA)
-                }
-                other => {
-                    eprintln!("PAOPAO_LOGIN_STAGE=extra_step");
-                    Ok(LoginState::NeedsExtraStep(other.to_string()))
-                }
-            };
-        }
-
-        eprintln!("PAOPAO_LOGIN_STAGE=logged_in");
-        Ok(LoginState::LoggedIn)
+        Ok(login_state_from_status(status))
     }
 
     pub fn get_pet(&self) -> Option<String> {
@@ -336,12 +333,38 @@ impl Account {
 
 #[cfg(test)]
 mod tests {
-    use super::srp_password_material;
+    use super::{login_state_from_status, srp_password_material};
+    use crate::auth::LoginState;
+    use plist::{Dictionary, Value};
+
+    #[test]
+    fn challenge_without_auth_method_never_reports_logged_in() {
+        let mut status = Dictionary::new();
+        status.insert("hsc".into(), Value::Integer(409.into()));
+        assert!(matches!(
+            login_state_from_status(&status),
+            LoginState::Needs2FAVerification
+        ));
+        for (method, device) in [
+            ("trustedDeviceSecondaryAuth", true),
+            ("secondaryAuth", false),
+        ] {
+            status.insert("au".into(), Value::String(method.into()));
+            match (login_state_from_status(&status), device) {
+                (LoginState::NeedsDevice2FA, true) | (LoginState::NeedsSMS2FA, false) => {}
+                _ => panic!("explicit verification method must take precedence"),
+            }
+        }
+        assert!(matches!(
+            login_state_from_status(&Dictionary::new()),
+            LoginState::LoggedIn
+        ));
+    }
 
     const SHA256_PASSWORD: &[u8] = &[
-        0x5e, 0x88, 0x48, 0x98, 0xda, 0x28, 0x04, 0x71, 0x51, 0xd0, 0xe5, 0x6f, 0x8d, 0xc6,
-        0x29, 0x27, 0x73, 0x60, 0x3d, 0x0d, 0x6a, 0xab, 0xbd, 0xd6, 0x2a, 0x11, 0xef, 0x72,
-        0x1d, 0x15, 0x42, 0xd8,
+        0x5e, 0x88, 0x48, 0x98, 0xda, 0x28, 0x04, 0x71, 0x51, 0xd0, 0xe5, 0x6f, 0x8d, 0xc6, 0x29,
+        0x27, 0x73, 0x60, 0x3d, 0x0d, 0x6a, 0xab, 0xbd, 0xd6, 0x2a, 0x11, 0xef, 0x72, 0x1d, 0x15,
+        0x42, 0xd8,
     ];
 
     #[test]

@@ -49,6 +49,7 @@ settings_select_teams = "Chọn nhóm..."
 settings_loading_teams = "Đang tải danh sách nhóm..."
 settings_language = "Language:"
 settings_system_language = "System"
+settings_reset_adi = "Reset Anisette Data"
 
 utilities_loading = "Đang tải công cụ..."
 utilities_refresh_installed_apps = "Làm mới các ứng dụng đã cài đặt"

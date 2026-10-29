@@ -4,7 +4,6 @@ use aes_gcm::aes::Aes256;
 use aes_gcm::{AeadInOut, Nonce};
 use hmac::digest::KeyInit;
 use hmac::{Hmac, Mac};
-use reqwest::header::{HeaderMap, HeaderValue};
 
 use crate::Error;
 use sha2::Sha256;
@@ -27,20 +26,7 @@ impl Account {
 
         let checksum = Self::create_checksum(&sk.to_vec(), dsid, app_name);
 
-        let mut gsa_headers = HeaderMap::new();
-        gsa_headers.insert(
-            "Content-Type",
-            HeaderValue::from_str("text/x-xml-plist").unwrap(),
-        );
-        gsa_headers.insert("Accept", HeaderValue::from_str("*/*").unwrap());
-        gsa_headers.insert(
-            "User-Agent",
-            HeaderValue::from_str("akd/1.0 CFNetwork/978.0.7 Darwin/18.7.0").unwrap(),
-        );
-        gsa_headers.insert(
-            "X-MMe-Client-Info",
-            HeaderValue::from_str(&valid_anisette.get_header("x-mme-client-info")?).unwrap(),
-        );
+        let gsa_headers = valid_anisette.gsa_headers()?;
 
         let header = RequestHeader {
             version: "1.0.1".to_string(),

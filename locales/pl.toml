@@ -49,6 +49,7 @@ settings_select_teams = "Wybierz zespół..."
 settings_loading_teams = "Ładowanie zespołów..."
 settings_language = "Język:"
 settings_system_language = "System"
+settings_reset_adi = "Reset Anisette Data"
 
 utilities_loading = "Ładowanie..."
 utilities_refresh_installed_apps = "Odśwież zainstalowane aplikacje"

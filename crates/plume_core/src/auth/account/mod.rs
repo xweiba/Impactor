@@ -15,11 +15,19 @@ pub async fn parse_response(
     res: Result<Response, reqwest::Error>,
 ) -> Result<plist::Dictionary, Error> {
     let res = res?;
-    let status = res.status().as_u16();
+    let status = res.status();
+    eprintln!("PAOPAO_HTTP_STATUS={:03}", status.as_u16());
+    // Preserve upstream's HTTP failure handling before parsing a body, while
+    // keeping the fork's byte-based binary/XML plist parser on success.
+    if !status.is_success() {
+        return Err(Error::GeneralHttpError {
+            url: res.url().to_string(),
+            status: status.as_u16(),
+        });
+    }
     let body = res.bytes().await?;
 
     eprintln!("PAOPAO_RESPONSE_FORMAT={}", response_format(&body));
-    eprintln!("PAOPAO_HTTP_STATUS={status:03}");
 
     parse_response_bytes(&body)
 }
@@ -51,7 +59,33 @@ fn parse_response_bytes(body: &[u8]) -> Result<plist::Dictionary, Error> {
 
 #[cfg(test)]
 mod response_tests {
-    use super::{check_error, parse_response_bytes, response_format};
+    use super::{check_error, parse_response, parse_response_bytes, response_format};
+
+    #[tokio::test]
+    async fn http_failure_is_reported_before_decoding_response_body() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        for status in [429, 503] {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let address = listener.local_addr().unwrap();
+            let server = tokio::spawn(async move {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                let mut request = [0; 4096];
+                socket.read(&mut request).await.unwrap();
+                socket.write_all(format!("HTTP/1.1 {status} Rejected\r\nContent-Length: 9\r\nConnection: close\r\n\r\nnot plist").as_bytes()).await.unwrap();
+            });
+            let response = reqwest::Client::builder()
+                .no_proxy()
+                .build()
+                .unwrap()
+                .get(format!("http://{address}/"))
+                .send()
+                .await;
+            assert!(
+                matches!(parse_response(response).await, Err(crate::Error::GeneralHttpError { status: code, .. }) if code == status)
+            );
+            server.await.unwrap();
+        }
+    }
 
     fn response_envelope() -> (plist::Dictionary, plist::Dictionary) {
         let mut response = plist::Dictionary::new();
