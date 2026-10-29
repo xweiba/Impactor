@@ -142,6 +142,9 @@ impl AnisetteHeaders {
     pub fn get_anisette_headers_provider(
         configuration: AnisetteConfiguration,
     ) -> Result<AnisetteHeadersProviderRes, AnisetteError> {
+        if provider_preference()? == ProviderPreference::Remote {
+            return Self::get_remote_provider(configuration);
+        }
         #[cfg(target_os = "macos")]
         if let Ok(provider) = macos_native::MacOsNativeAnisetteProvider::new(configuration.clone())
         {
@@ -165,6 +168,15 @@ impl AnisetteHeaders {
             return Ok(ssc_anisette_headers_provider);
         }
 
+        if provider_preference()? == ProviderPreference::Local {
+            return Err(AnisetteError::MissingLibraries);
+        }
+        Self::get_remote_provider(configuration)
+    }
+
+    fn get_remote_provider(
+        configuration: AnisetteConfiguration,
+    ) -> Result<AnisetteHeadersProviderRes, AnisetteError> {
         #[cfg(feature = "remote-anisette-v3")]
         {
             let provider = remote_anisette_v3::RemoteAnisetteProviderV3::new(
@@ -193,6 +205,66 @@ impl AnisetteHeaders {
         Ok(AnisetteHeadersProviderRes::local(Box::new(
             ADIProxyAnisetteProvider::new(ssc_adi_proxy, config_path.to_path_buf())?,
         )))
+    }
+}
+
+#[derive(Debug, PartialEq)]
+enum ProviderPreference {
+    Auto,
+    Local,
+    Remote,
+}
+
+fn parse_provider_preference(value: &str) -> Result<ProviderPreference, AnisetteError> {
+    match value {
+        "auto" => Ok(ProviderPreference::Auto),
+        "local" => Ok(ProviderPreference::Local),
+        "remote" => Ok(ProviderPreference::Remote),
+        _ => Err(AnisetteError::InvalidArgument(
+            "PLUME_ANISETTE_PROVIDER must be auto, local or remote".into(),
+        )),
+    }
+}
+
+// Explicit selection occurs before constructing a provider or sending a login.
+// Automatic selection retains the existing platform preference.
+fn provider_preference() -> Result<ProviderPreference, AnisetteError> {
+    parse_provider_preference(
+        &std::env::var("PLUME_ANISETTE_PROVIDER").unwrap_or_else(|_| "auto".into()),
+    )
+}
+
+#[cfg(test)]
+mod provider_selection_tests {
+    use super::*;
+
+    #[test]
+    fn accepts_only_explicit_supported_modes() {
+        assert_eq!(
+            parse_provider_preference("auto").ok(),
+            Some(ProviderPreference::Auto)
+        );
+        assert_eq!(
+            parse_provider_preference("local").ok(),
+            Some(ProviderPreference::Local)
+        );
+        assert_eq!(
+            parse_provider_preference("remote").ok(),
+            Some(ProviderPreference::Remote)
+        );
+        for value in ["", "REMOTE", "remote extra", "unknown"] {
+            assert!(parse_provider_preference(value).is_err());
+        }
+    }
+
+    #[cfg(feature = "remote-anisette-v3")]
+    #[test]
+    fn explicit_remote_does_not_load_local_libraries_or_make_requests() {
+        let result = AnisetteHeaders::get_remote_provider(AnisetteConfiguration::new());
+        assert!(result.is_ok_and(|provider| matches!(
+            provider.provider_type,
+            AnisetteHeadersProviderType::Remote
+        )));
     }
 }
 

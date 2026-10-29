@@ -180,7 +180,9 @@ impl AnisetteData {
 fn make_reqwest() -> Result<Client, AnisetteError> {
     Ok(ClientBuilder::new()
         .http1_title_case_headers()
-        .danger_accept_invalid_certs(true) // TODO: pin the apple certificate
+        .add_root_certificate(reqwest::Certificate::from_der(include_bytes!(
+            "apple_root.der"
+        ))?)
         .build()?)
 }
 
@@ -518,7 +520,7 @@ impl AnisetteHeadersProvider for RemoteAnisetteProviderV3 {
                     plist::to_file_xml(config_path, state)?;
                     client.get_headers(&state).await?
                 } else {
-                    panic!()
+                    return Err(err);
                 }
             }
         };
@@ -531,9 +533,9 @@ mod tests {
     use crate::anisette_headers_provider::AnisetteHeadersProvider;
     use crate::remote_anisette_v3::RemoteAnisetteProviderV3;
     use crate::{AnisetteError, DEFAULT_ANISETTE_URL_V3};
-    use log::info;
 
     #[tokio::test]
+    #[ignore = "opt-in live remote provisioning; never prints authentication data"]
     async fn fetch_anisette_remote_v3() -> Result<(), AnisetteError> {
         crate::tests::init_logger();
 
@@ -542,12 +544,10 @@ mod tests {
             "anisette_test".into(),
             "0".to_string(),
         );
-        info!(
-            "Remote headers: {:?}",
-            (&mut provider as &mut dyn AnisetteHeadersProvider)
-                .get_authentication_headers()
-                .await?
-        );
+        let headers = (&mut provider as &mut dyn AnisetteHeadersProvider)
+            .get_authentication_headers()
+            .await?;
+        assert!(!headers.is_empty());
         Ok(())
     }
 }

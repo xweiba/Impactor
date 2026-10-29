@@ -1,5 +1,24 @@
 # PaoPao Impactor fork fixes
 
+## Explicit device-authentication source (2026-10-29)
+
+`PLUME_ANISETTE_PROVIDER=auto|local|remote` selects the source before any account
+request. Auto preserves the existing platform preference; local disables remote
+fallback, and remote bypasses native/library loading. This permits Linux to use
+the existing upstream V3 service when the loadable local library's data reaches
+Apple but SRP initialization returns404. HTTP404 does not by itself prove which
+device header is responsible, and no credential replay/failover is added.
+`PLUME_ANISETTE_V3_URL` still selects a custom compatible server.
+
+Remote V3 now validates TLS using the normal roots plus the same public Apple
+root certificate already embedded by plume_core (the copied DER is identical).
+Header-fetch failures propagate as errors rather than panicking. Live remote
+smoke is opt-in and never logs authentication values. Unit tests cover explicit
+mode parsing and constructing a remote provider without local libraries or HTTP.
+Account passwords/codes remain in client-to-Apple requests, outside the device
+authentication provider. Remove this fork selector once upstream provides an
+equivalent explicit source choice and regressions pass.
+
 ## Native macOS device authentication (2026-10-28)
 
 On supported macOS 10–26, prefer local AOSKit/AuthKit data using the interface
