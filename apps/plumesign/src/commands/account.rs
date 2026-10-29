@@ -220,25 +220,25 @@ async fn login(args: LoginArgs) -> Result<()> {
 
     println!("Logging in...");
     eprintln!("PAOPAO_LOGIN_STAGE=anisette_start");
-    let account = match Account::login(login_closure, tfa_closure, anisette_config).await {
-        std::result::Result::Ok(account) => account,
-        std::result::Result::Err(error) => {
-            eprintln!("PAOPAO_LOGIN_ERROR={}", safe_login_error_kind(&error));
-            return Err(error.into());
-        }
-    };
+    let account = login_result(Account::login(login_closure, tfa_closure, anisette_config).await)?;
     eprintln!("PAOPAO_LOGIN_STAGE=authenticated");
 
     eprintln!("PAOPAO_LOGIN_STAGE=save_account");
     let settings_path = get_settings_path();
-    let mut settings = AccountStore::load(&Some(settings_path.clone())).await?;
-    settings
-        .accounts_add_from_session(username, account)
-        .await?;
+    let mut settings = login_result(AccountStore::load(&Some(settings_path.clone())).await)?;
+    login_result(settings.accounts_add_from_session(username, account).await)?;
 
     log::info!("Successfully logged in and account saved.");
 
     Ok(())
+}
+
+/// All login phases share classification, including token exchange and saving.
+fn login_result<T>(result: std::result::Result<T, PlumeError>) -> Result<T> {
+    result.map_err(|error| {
+        eprintln!("PAOPAO_LOGIN_ERROR={}", safe_login_error_kind(&error));
+        error.into()
+    })
 }
 
 fn safe_login_error_kind(error: &PlumeError) -> &'static str {
@@ -274,8 +274,22 @@ fn caused_by_eof(mut error: &(dyn std::error::Error + 'static)) -> bool {
 
 #[cfg(test)]
 mod login_tests {
-    use super::{caused_by_eof, safe_login_error_kind};
+    use super::{caused_by_eof, login_result, safe_login_error_kind};
     use plume_core::Error as PlumeError;
+
+    #[test]
+    fn login_phase_classification_preserves_typed_failure() {
+        let result = login_result::<()>(Err(PlumeError::AuthSrpWithMessage(
+            -80045,
+            "synthetic private detail".into(),
+        )));
+        let error = result.unwrap_err();
+        assert_eq!(
+            safe_login_error_kind(error.downcast_ref::<PlumeError>().unwrap()),
+            "auth_device"
+        );
+        assert!(login_result(std::result::Result::<_, PlumeError>::Ok(())).is_ok());
+    }
 
     #[test]
     fn eof_category_uses_error_kind_not_error_text() {
