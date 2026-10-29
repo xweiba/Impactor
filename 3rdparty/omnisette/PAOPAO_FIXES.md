@@ -1,5 +1,24 @@
 # PaoPao Impactor fork fixes
 
+## Native macOS device authentication (2026-10-28)
+
+On supported macOS 10–26, prefer local AOSKit/AuthKit data using the interface
+documented by SideStore/MacAnisette. Framework, selector, ABI, object type and
+required HTTP header checks fail closed. macOS 27 and unknown versions retain
+the compatibility route. Only copied Rust strings leave an autorelease pool.
+The first validated snapshot is consumed directly; subsequent native collection
+failures switch to the existing library/V3 provider before any Apple request.
+This never retries a password or verification code. Fixed source markers contain
+no header values; real device smoke tests are opt-in and never print values.
+
+Reference: https://github.com/SideStore/MacAnisette (AOSKit native interfaces).
+Mac 26.4.1 ARM64 native smoke and missing/invalid-header tests passed. These
+checks establish local data availability, not successful Apple account login.
+Private API changes and Objective-C exceptions remain compatibility risks; no
+private native object or account credential is persisted by this provider.
+Exit condition: remove this fork provider when upstream offers equivalent
+native macOS support and user-driven login regression passes.
+
 ## Upstream 2.7.2 integration (2026-10-28)
 
 Follow-up diagnostics report only the selected local/remote provider and fixed

@@ -15,6 +15,9 @@ pub mod adi_proxy;
 pub mod anisette_headers_provider;
 pub mod store_services_core;
 
+#[cfg(target_os = "macos")]
+mod macos_native;
+
 #[cfg(feature = "remote-anisette-v3")]
 pub mod remote_anisette_v3;
 
@@ -139,21 +142,42 @@ impl AnisetteHeaders {
     pub fn get_anisette_headers_provider(
         configuration: AnisetteConfiguration,
     ) -> Result<AnisetteHeadersProviderRes, AnisetteError> {
+        #[cfg(target_os = "macos")]
+        if let Ok(provider) = macos_native::MacOsNativeAnisetteProvider::new(configuration.clone())
+        {
+            eprintln!("PAOPAO_LOGIN_SOURCE=macos_native");
+            return Ok(AnisetteHeadersProviderRes::local(Box::new(provider)));
+        }
+
+        Self::get_compatibility_provider(configuration)
+    }
+
+    // Shared with native collection failures; fallback happens before a request
+    // reaches Apple, never by replaying account credentials.
+    pub(crate) fn get_compatibility_provider(
+        configuration: AnisetteConfiguration,
+    ) -> Result<AnisetteHeadersProviderRes, AnisetteError> {
         // TODO: handle Err because it will just go to remote anisette and not tell the user anything
         if let Ok(ssc_anisette_headers_provider) =
             AnisetteHeaders::get_ssc_anisette_headers_provider(configuration.clone())
         {
+            eprintln!("PAOPAO_LOGIN_SOURCE=local_library");
             return Ok(ssc_anisette_headers_provider);
         }
 
         #[cfg(feature = "remote-anisette-v3")]
-        return Ok(AnisetteHeadersProviderRes::remote(Box::new(
-            remote_anisette_v3::RemoteAnisetteProviderV3::new(
+        {
+            let provider = remote_anisette_v3::RemoteAnisetteProviderV3::new(
                 configuration.anisette_url_v3,
                 configuration.configuration_path.clone(),
                 configuration.macos_serial.clone(),
-            ),
-        )));
+            );
+            eprintln!("PAOPAO_LOGIN_SOURCE=remote_v3");
+            return Ok(AnisetteHeadersProviderRes::remote(Box::new(provider)));
+        }
+
+        #[cfg(not(feature = "remote-anisette-v3"))]
+        Err(AnisetteError::UnsupportedDevice)
     }
 
     pub fn get_ssc_anisette_headers_provider(
@@ -193,9 +217,9 @@ mod tests {
 
     #[cfg(not(feature = "async"))]
     #[test]
+    #[ignore = "opt-in device authentication smoke; may provision local data"]
     fn fetch_anisette_auto() -> Result<()> {
         use crate::{AnisetteConfiguration, AnisetteHeaders};
-        use log::info;
         use std::path::PathBuf;
 
         crate::tests::init_logger();
@@ -204,10 +228,8 @@ mod tests {
             AnisetteConfiguration::new()
                 .set_configuration_path(PathBuf::new().join("anisette_test")),
         )?;
-        info!(
-            "Headers: {:?}",
-            provider.provider.get_authentication_headers()?
-        );
+        // Authentication headers contain OTPs and device identifiers.
+        assert!(!provider.provider.get_authentication_headers()?.is_empty());
         Ok(())
     }
 }
